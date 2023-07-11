@@ -10,11 +10,19 @@ Il modello (che sarà fornito in input alla piattaforma durante l’esame) consi
 - Numero di partizioni lungo la Y.
 - Numero di thread per processo MPI.
 - Numero di stepMentre il file di input conterrà lo stato iniziale del dominio, come ad esempio:
+
 00000000000000000000
+
 00000000001000000000 
+
 00000000000100000000 
+
 00000000011100000000 
+
 00000000000000000000 
+
 00000000000000000000 
+
 00000000000000000000 
+
 00000000000000000000 
