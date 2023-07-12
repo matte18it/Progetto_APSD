@@ -9,6 +9,8 @@ using namespace std;
 #define NROWS 20
 
 int xPartitions, yPartitions, nThreads, steps;
+int *readM;
+int *writeM;
 
 
 int main(int argc, char *argv[]) {
@@ -24,14 +26,9 @@ int main(int argc, char *argv[]) {
         printf("Errore nell'apertura del file di configurazione");
         exit(1);
     }
-    ifstream Input("Input.txt");
-    if(configurazione.is_open()){
-        configurazione >> xPartitions >> yPartitions >> nThreads >> steps;
-        configurazione.close();
-    }else{
-        printf("Errore nell'apertura del file di configurazione");
-        exit(1);
-    }
+    
+   
+    
     
     
 
