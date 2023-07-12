@@ -4,7 +4,9 @@
 #include <mpi.h>
 #include <fstream>
 #include <iostream>
+#include <allegro.h>
 using namespace std;
+
 #define NCOLS 20
 #define NROWS 8
 
@@ -16,6 +18,13 @@ int *readM;
 int *writeM;
 int *bigM;
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
+
+//variabili allegro
+BITMAP *buffer;
+int nero, bianco;
+#define WIDTH NCOLS*20
+#define HEIGHT NROWS*20
+
 void loadConfiguration(){
     ifstream configurazione("Configuration.txt");
     if(configurazione.is_open()){
@@ -87,14 +96,51 @@ void initAutoma(){
 
 }
 
-int main(int argc, char *argv[]) {    
+void initAllegro() {
+	allegro_init();
+    install_keyboard();
+	set_color_depth(24);
+	buffer = create_bitmap(WIDTH, HEIGHT);
+	set_gfx_mode(GFX_AUTODETECT_WINDOWED, WIDTH, HEIGHT, 0, 0);
+
+    char windowTitle[50];
+    sprintf(windowTitle, "Process %d", Rank);
+    set_window_title(windowTitle);
+
+	nero = makecol(0, 0, 0);
+	bianco = makecol(255, 255, 255);
+}
+
+void drawWithAllegro() {
+    int const CELL_SIZE = WIDTH / (NCOLS / xPartitions);
+
+	for (int i = 1; i < NROWS/yPartitions+1; i++)
+		for (int j = 1; j < NCOLS/xPartitions+1; j++){
+            int x = (i-1) * CELL_SIZE;
+            int y = (j-1) * CELL_SIZE;
+            //printf("X1:%d   X2:%d   Y1:%d   Y2:%d, i:%d    j:%d   readM:%d   rank:%d\n", x, x+CELL_SIZE, y, y+CELL_SIZE, i, j, readM[v(i, j)], Rank);
+            switch (readM[v(i, j)]) {
+			case 0:
+				rectfill(buffer, y, x, y + CELL_SIZE, x + CELL_SIZE, nero);
+				break;
+			case 1:
+				rectfill(buffer, y, x, y + CELL_SIZE, x + CELL_SIZE, bianco);
+				break;
+			}
+        }
+	blit(buffer, screen, 0, 0, 0, 0, WIDTH, HEIGHT);
+    readkey();
+}
+
+int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
     MPI_Comm_size( MPI_COMM_WORLD, &nProc);
 
-    
-
     init();
+
+    //inizializzo allegro
+    initAllegro();
 
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &columnType);
     MPI_Type_commit(&columnType);  
@@ -103,9 +149,9 @@ int main(int argc, char *argv[]) {
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
 
     initAutoma();
-    if(Rank==1){
-    
-   
+
+    if(Rank == 1){
+        printf("RANK 1\n");
         for(int i=1; i<NROWS/yPartitions+1; i++){
             for(int j=1; j<NCOLS/xPartitions+1; j++){
                 printf("%d ", readM[v(i,j)]);
@@ -113,20 +159,11 @@ int main(int argc, char *argv[]) {
             printf("\n");
         }
     }
-    
-    
-   
-    
-    
-    
 
-
-
+    drawWithAllegro();
 
     MPI_Finalize();  
-
-	
-
 	return 0;
 
 }
+END_OF_MAIN();
