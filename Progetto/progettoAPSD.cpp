@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
         } 
         Input.close();
     }else{
-        printf("Errore nell'apertura del file di configurazione");
+        printf("Errore nell'apertura del file di Input");
         exit(1);
     }
     for (int i = 0; i < NROWS; i++)
