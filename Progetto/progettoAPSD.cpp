@@ -4,18 +4,9 @@
 #include <mpi.h>
 #include <fstream>
 #include <iostream>
-
-#include <allegro5/allegro.h>
-#include "PrintAllegro.h"
-#include "allegro/Init.h"
-#include "allegro/Frame.h"
-#include "allegro/Panel.h"
-using namespace allegro;
-
 using namespace std;
 #define NCOLS 20
 #define NROWS 8
-Panel *p;
 
 #define v(r,c) ((r)*(NCOLS)+(c))
 MPI_Datatype columnType;
@@ -91,13 +82,17 @@ void initAutoma(){
         MPI_Recv(&readM[v(1,1)], 1, columnType, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
     }
+   
+
+
 }
 
-int main(int argc, char *argv[]) {   
-
+int main(int argc, char *argv[]) {    
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
     MPI_Comm_size( MPI_COMM_WORLD, &nProc);
+
+    
 
     init();
 
@@ -108,28 +103,9 @@ int main(int argc, char *argv[]) {
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
 
     initAutoma();
-    if(Rank == 0){
-        //il processo con rank 0 crea il pannello di disegno
-
-        //codice di test
-        for(int i=0; i<NROWS; i++)
-            for(int j=0; j<NCOLS; j++)
-                readM[v(i,j)]=0;
-        readM[v(5, 4)] = 1;
-        readM[v(4, 4)] = 1;
-        readM[v(3, 4)] = 1;
-        readM[v(2, 3)] = 1;
-        readM[v(7, 19)] = 1;
-        //fine codice di test
-        
-        Init::init();
-        Frame f(NCOLS*50, NROWS*50, "ProgettoAPSD"); 
-        p = new PrintAllegro(readM, NROWS, NCOLS);
-        f.add(p);
-        p->repaint();
-        Init::sleep(2);
-    }
     if(Rank==1){
+    
+   
         for(int i=1; i<NROWS/yPartitions+1; i++){
             for(int j=1; j<NCOLS/xPartitions+1; j++){
                 printf("%d ", readM[v(i,j)]);
@@ -137,8 +113,20 @@ int main(int argc, char *argv[]) {
             printf("\n");
         }
     }
+    
+    
+   
+    
+    
+    
+
+
+
 
     MPI_Finalize();  
+
+	
+
 	return 0;
 
 }
