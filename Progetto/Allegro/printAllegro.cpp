@@ -7,7 +7,7 @@ void printAllegro::initAllegro(int Rank, int WIDTH, int HEIGHT){
 	set_gfx_mode(GFX_AUTODETECT_WINDOWED, WIDTH, HEIGHT, 0, 0);
 
     char windowTitle[50];
-    sprintf(windowTitle, "Allegro View");
+    sprintf(windowTitle, "Allegro Screen");
     set_window_title(windowTitle);
 
 	nero = makecol(0, 0, 0);
