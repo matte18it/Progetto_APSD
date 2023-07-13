@@ -140,14 +140,44 @@ void exchBoard(){
     MPI_Isend(&readM[v(0,1)], 1, columnType, rankLeft, 20, MPI_COMM_WORLD, &request);
     MPI_Recv(&readM[v(0,0)], 1, columnType, rankLeft, 17, MPI_COMM_WORLD, &status);
     MPI_Recv(&readM[v(0,NCOLS/xPartitions+1)], 1, columnType, rankRight, 20, MPI_COMM_WORLD, &status);
+    
 
-    MPI_Isend(&readM[v(NROWS/yPartitions,0)], NCOLS/xPartitions, MPI_INT, rankDown, 12, MPI_COMM_WORLD, &request);
-	MPI_Isend(&readM[v(1,0)], NCOLS/xPartitions, MPI_INT, rankUp, 15, MPI_COMM_WORLD, &request);
-	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
-	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
+    MPI_Isend(&readM[v(NROWS/yPartitions,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 12, MPI_COMM_WORLD, &request);
+	MPI_Isend(&readM[v(1,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 15, MPI_COMM_WORLD, &request);
+	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
+	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
 
 
 }
+inline void transitionFunction(int i, int j){
+    int cont=0;// Conto i vicini vivi
+	for(int di=-1;di<2;di++)
+		for(int dj=-1;dj<2;dj++)
+			if ((di!=0 || dj!=0) &&readM[v((i+di+NROWS)%NROWS,(j+dj+NCOLS)%NCOLS)]==1)
+				cont++;
+	// Regole Gioco della Vita
+	if (readM[v(i,j)]==1)
+		if (cont==2 || cont ==3)
+			writeM[v(i,j)]=1;
+		else
+			writeM[v(i,j)]=0;
+	else
+		if (cont ==3)
+			writeM[v(i,j)]=1;
+		else
+			writeM[v(i,j)]=0;
+
+}
+inline void transFunc(){   
+	for(int i=1;i<NROWS/yPartitions+1;i++){
+		for(int j=1;j<NCOLS/xPartitions+1;j++){
+			transitionFunction(i,j);
+			}}}
+void swap(){
+    int * p=readM;
+    readM=writeM;
+    writeM=p;}
+
 int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
@@ -189,9 +219,19 @@ int main(int argc, char *argv[]) {
 
     initAutoma();
 //drawWithAllegro();
-    for(int i=0; i<steps; i++){
+    //for(int i=0; i<steps; i++){
         exchBoard();
-    }
+        //transFunc();
+      //  swap();
+    //}
+    if(Rank==3){
+    for(int i=0; i<NROWS/yPartitions+2; i++){
+        for(int j=0; j<NCOLS/xPartitions+2; j++){
+            printf("%d ", readM[v(i, j)]);
+        }
+        printf("\n");
+    }}
+
 
     
 
