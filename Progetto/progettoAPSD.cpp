@@ -301,7 +301,7 @@ if(Rank==0)
         print();
         transFunc();
         swap();
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
     ending=true;
     pthread_cond_broadcast(&cond);
