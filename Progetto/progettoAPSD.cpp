@@ -134,6 +134,18 @@ void drawWithAllegro() {
 }
 
 void exchBoard(){
+    MPI_Request request;
+    MPI_Status status;
+    MPI_Isend(&readM[v(0,NCOLS/xPartitions)], 1, columnType, rankRight, 17, MPI_COMM_WORLD, &request);
+    MPI_Isend(&readM[v(0,1)], 1, columnType, rankLeft, 20, MPI_COMM_WORLD, &request);
+    MPI_Recv(&readM[v(0,0)], 1, columnType, rankLeft, 17, MPI_COMM_WORLD, &status);
+    MPI_Recv(&readM[v(0,NCOLS/xPartitions+1)], 1, columnType, rankRight, 20, MPI_COMM_WORLD, &status);
+
+    MPI_Isend(&readM[v(NROWS/yPartitions,0)], NCOLS/xPartitions, MPI_INT, rankDown, 12, MPI_COMM_WORLD, &request);
+	MPI_Isend(&readM[v(1,0)], NCOLS/xPartitions, MPI_INT, rankUp, 15, MPI_COMM_WORLD, &request);
+	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
+	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
+
 
 }
 int main(int argc, char *argv[]) {
@@ -148,6 +160,8 @@ int main(int argc, char *argv[]) {
 
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
+    MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);
+    MPI_Type_commit(&columnType);
 
     readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
@@ -171,23 +185,15 @@ int main(int argc, char *argv[]) {
     else
         rankRight = (Rank+1);
        
-    
 
-    
-       
-
-   
-    
 
     initAutoma();
-
-
+//drawWithAllegro();
     for(int i=0; i<steps; i++){
-        drawWithAllegro();
-        readkey();
         exchBoard();
-
     }
+
+    
 
     
     delete[] readM;
