@@ -6,7 +6,8 @@
 #ifndef PRINT_ALLEGRO_H
 #define PRINT_ALLEGRO_H
 
-#define v(r,c) ((r)*(NCOLS)+(c))
+#define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c))
+#define h(r,c) ((r)*(NCOLS)+(c))
 
 class printAllegro {
     private:
@@ -15,7 +16,7 @@ class printAllegro {
 
     public:
         void initAllegro(int Rank, int WIDTH, int HEIGHT);
-        void drawWithAllegro(int NCOLS, int xPartitions, int yPartitions, int NROWS, int WIDTH, int HEIGHT, int* readM, int Rank);
+        void drawWithAllegro(int NCOLS, int xPartitions, int yPartitions, int NROWS, int WIDTH, int HEIGHT, int* bigM);
 };
 
 #include "printAllegro.cpp"

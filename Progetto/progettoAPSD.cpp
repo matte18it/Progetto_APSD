@@ -1,21 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <mpi.h>
 #include <fstream>
 #include <iostream>
-//#include <allegro.h>
 #include <cmath>
 #include <pthread.h>
+
+//per lo sleep
+#include <thread>
+
 #include <queue>
-//#include "Allegro/printAllegro.h"
+#include "Allegro/printAllegro.h"
 
 using namespace std;
 
 #define NCOLS 20
 #define NROWS 8
-#define WIDTH NCOLS*20
-#define HEIGHT NROWS*20
+#define WIDTH NCOLS*40
+#define HEIGHT NROWS*40
 
 #define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c))
 #define h(r,c) ((r)*(NCOLS)+(c))
@@ -88,12 +90,7 @@ return NULL;
 pthread_t *threads;
 
 //variabili allegro
-//printAllegro printAl;
-
-//BITMAP *buffer;
-int nero, bianco;
-#define WIDTH NCOLS*20
-#define HEIGHT NROWS*20
+printAllegro printAl;
 
 void loadConfiguration(){
     ifstream configurazione("Configuration.txt");
@@ -199,21 +196,25 @@ void print(){
                 if(i==0 && j==0){
                     continue;
                 }else{
-                    
                     MPI_Recv(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 29, MPI_COMM_WORLD, &stat);
                 dest++;}
                 
             }
         } }
-//Stampa di bigM (adesso senza allegro)
+    //Stampa di bigM
     if(Rank==0){
-    for(int i=0; i<NROWS; i++){
-        for(int j=0; j<NCOLS; j++){
-            printf("%d ", bigM[h(i, j)]);
+        //disegno con allegro sul rank 0
+        printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, bigM);
+
+        //stampo sul terminale senza allegro
+        for(int i=0; i<NROWS; i++){
+            for(int j=0; j<NCOLS; j++){
+                printf("%d ", bigM[h(i, j)]);
+            }
+            printf("\n");
         }
-        printf("\n");
+        printf("-----------------------------------------------\n");
     }
-    printf("-----------------------------------------------\n");}
 }
 
  void transFunc(){   
@@ -252,8 +253,9 @@ if(Rank==0)
 
 
 
-    //inizializzo allegro
-    //printAl.initAllegro(Rank, WIDTH, HEIGHT);
+    //inizializzo allegro sul rank 0
+    if(Rank == 0)
+        printAl.initAllegro(Rank, WIDTH, HEIGHT);
 
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
@@ -294,15 +296,12 @@ if(Rank==0)
     initAutoma();
     initPthread();
 
-    
-    //disegno con allegro
-    //printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
     for(int i=0; i<steps; i++){
         exchBoard();
         print();
         transFunc();
         swap();
-       
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
     ending=true;
     pthread_cond_broadcast(&cond);
@@ -325,4 +324,5 @@ if(Rank==0)
     MPI_Finalize();  
 	return 0;
 }
-//END_OF_MAIN();
+
+END_OF_MAIN();
