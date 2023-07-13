@@ -62,21 +62,25 @@ struct cell{
     int j;
 };
 queue<cell> q;
-void * run(void * arg){
-    while (!ending || !q.empty()){
+void run2(){
     pthread_mutex_lock(&mutex);
-    while (q.empty())
+    while (q.empty() && !ending)
         pthread_cond_wait(&cond, &mutex);
-
+    if(!q.empty()){
     cell c=q.front();
     q.pop();
     pthread_mutex_unlock(&mutex);
-    transitionFunction(c.i, c.j);
+    transitionFunction(c.i, c.j);}
+    else
+        pthread_mutex_unlock(&mutex);
+}
+void * run(void * arg){
     
-    }
-    
-    
-    
+    while( !ending){
+       
+        run2();
+        }
+
 return NULL;
 }
 
@@ -180,7 +184,7 @@ void exchBoard(){
 	MPI_Send(&readM[v(1,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 15, MPI_COMM_WORLD);
 	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
 	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
-
+    
 
 }
 void print(){
@@ -212,7 +216,7 @@ void print(){
     printf("-----------------------------------------------\n");}
 }
 
-inline void transFunc(){   
+ void transFunc(){   
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
             cell c(i,j);
@@ -223,12 +227,13 @@ inline void transFunc(){
 void swap(){
    
     while (!q.empty()) {
-        sleep(1);
+        sleep(0.1);
     }
     
     int * p=readM;
     readM=writeM;
-    writeM=p;}
+    writeM=p;
+    }
 
 void initPthread(){
     pthread_mutex_init(&mutex, NULL);
@@ -292,15 +297,13 @@ if(Rank==0)
     
     //disegno con allegro
     //printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
-
     for(int i=0; i<steps; i++){
         exchBoard();
-       
         print();
         transFunc();
         swap();
+       
     }
-    printf("ciao");
     ending=true;
     pthread_cond_broadcast(&cond);
     for(int i=0; i<nThreads; i++){
