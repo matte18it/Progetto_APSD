@@ -194,7 +194,11 @@ void print(){
         for(int i=0; i<yPartitions; i++){
             for(int j=0; j<xPartitions; j++){
                 if(i==0 && j==0){
-                    continue;
+                    for(int c=1; c<NROWS/yPartitions+1; c++){
+                        for(int r=1; r<NCOLS/xPartitions+1; r++){
+                        bigM[h(c-1,r-1)]=readM[v(c,r)];
+                        }
+                    }
                 }else{
                     MPI_Recv(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 29, MPI_COMM_WORLD, &stat);
                 dest++;}
@@ -221,6 +225,7 @@ void print(){
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
             cell c(i,j);
+           
             q.push(c);
             pthread_cond_broadcast(&cond);
             
@@ -230,7 +235,6 @@ void swap(){
     while (!q.empty()) {
         sleep(0.1);
     }
-    
     int * p=readM;
     readM=writeM;
     writeM=p;
@@ -302,6 +306,7 @@ if(Rank==0)
         transFunc();
         swap();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
     }
     ending=true;
     pthread_cond_broadcast(&cond);
