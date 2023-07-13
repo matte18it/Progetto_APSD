@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <allegro.h>
+#include <cmath>
 using namespace std;
 
 #define NCOLS 20
@@ -158,11 +159,25 @@ int main(int argc, char *argv[]) {
     if(rankDown>=nProc)
         rankDown = (rankDown%nProc);
     
-    rankLeft=(Rank-yPartitions);
-    rankRight=(Rank+1)%yPartitions;
+    float colonna=Rank/xPartitions;
+    float colonnameno=(Rank-1)/xPartitions;
+    if(Rank-1<0 || colonnameno<colonna)
+        rankLeft = (Rank+xPartitions-1);
+    else
+        rankLeft = (Rank-1);
+    float colonnapiu=(Rank+1)/xPartitions;
+    if(Rank+1>=nProc || colonnapiu>colonna)
+        rankRight = (Rank-xPartitions+1);
+    else
+        rankRight = (Rank+1);
+       
     
+
     
-    printf("Rank: %d, rankUp: %d, rankDown: %d, rankLeft: %d, rankRight: %d\n", Rank, rankUp, rankDown, rankLeft, rankRight);
+       
+
+   
+    
 
     initAutoma();
 
