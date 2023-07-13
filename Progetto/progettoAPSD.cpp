@@ -113,19 +113,19 @@ void initAllegro() {
 }
 
 void drawWithAllegro() {
-    int const CELL_SIZE = WIDTH / (NCOLS / xPartitions);
+    int const CELL_WIDTH = WIDTH / (NCOLS / xPartitions);
+    int const CELL_HEIGHT = HEIGHT / (NROWS / yPartitions);
 
 	for (int i = 1; i < NROWS/yPartitions+1; i++)
 		for (int j = 1; j < NCOLS/xPartitions+1; j++){
-            int x = (i-1) * CELL_SIZE;
-            int y = (j-1) * CELL_SIZE;
-            //printf("X1:%d   X2:%d   Y1:%d   Y2:%d, i:%d    j:%d   readM:%d   rank:%d\n", x, x+CELL_SIZE, y, y+CELL_SIZE, i, j, readM[v(i, j)], Rank);
+            int x = (i-1) * CELL_HEIGHT;
+            int y = (j-1) * CELL_WIDTH;
             switch (readM[v(i, j)]) {
 			case 0:
-				rectfill(buffer, y, x, y + CELL_SIZE, x + CELL_SIZE, nero);
+				rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, nero);
 				break;
 			case 1:
-				rectfill(buffer, y, x, y + CELL_SIZE, x + CELL_SIZE, bianco);
+				rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, bianco);
 				break;
 			}
         }
@@ -218,7 +218,7 @@ int main(int argc, char *argv[]) {
 
 
     initAutoma();
-//drawWithAllegro();
+    drawWithAllegro();
     //for(int i=0; i<steps; i++){
         exchBoard();
         //transFunc();
