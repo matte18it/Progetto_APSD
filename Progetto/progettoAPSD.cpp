@@ -11,7 +11,7 @@ using namespace std;
 #define NROWS 8
 
 #define v(r,c) ((r)*(NCOLS)+(c))
-MPI_Datatype columnType;
+MPI_Datatype bigMtype, columnType;
 
 int xPartitions, yPartitions, nThreads, steps;
 int *readM;
@@ -75,7 +75,7 @@ void initAutoma(){
                 if(i==0 && j==0){
                     continue;
                 }else
-                    MPI_Send(&bigM[v(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, columnType, dest, 0, MPI_COMM_WORLD);
+                    MPI_Send(&bigM[v(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 0, MPI_COMM_WORLD);
                 dest++;
                 
             }
@@ -88,7 +88,7 @@ void initAutoma(){
                 readM[v(i,j)]=0;
             }
         }
-        MPI_Recv(&readM[v(1,1)], 1, columnType, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&readM[v(1,1)], 1, bigMtype, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
     }
    
@@ -132,6 +132,9 @@ void drawWithAllegro() {
     readkey();
 }
 
+void exchBoard(){
+
+}
 int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
@@ -142,26 +145,40 @@ int main(int argc, char *argv[]) {
     //inizializzo allegro
     initAllegro();
 
-    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &columnType);
-    MPI_Type_commit(&columnType);  
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &bigMtype);
+    MPI_Type_commit(&bigMtype);  
 
     readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
 
+    rankUp = (Rank - xPartitions);
+    if(rankUp<0)
+        rankUp = (rankUp+nProc);
+    rankDown = (Rank + xPartitions);
+    if(rankDown>=nProc)
+        rankDown = (rankDown%nProc);
+    
+    rankLeft=(Rank-yPartitions);
+    rankRight=(Rank+1)%yPartitions;
+    
+    
+    printf("Rank: %d, rankUp: %d, rankDown: %d, rankLeft: %d, rankRight: %d\n", Rank, rankUp, rankDown, rankLeft, rankRight);
+
     initAutoma();
 
-    if(Rank == 1){
-        printf("RANK 1\n");
-        for(int i=1; i<NROWS/yPartitions+1; i++){
-            for(int j=1; j<NCOLS/xPartitions+1; j++){
-                printf("%d ", readM[v(i,j)]);
-            }
-            printf("\n");
-        }
+
+    for(int i=0; i<steps; i++){
+        drawWithAllegro();
+        readkey();
+        exchBoard();
+
     }
 
-    drawWithAllegro();
-
+    
+    delete[] readM;
+    delete[] writeM;
+    if(Rank==0)
+        delete[] bigM;  
     MPI_Finalize();  
 	return 0;
 
