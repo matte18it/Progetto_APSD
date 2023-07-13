@@ -6,7 +6,7 @@
 #include <iostream>
 //#include <allegro.h>
 #include <cmath>
-#include "Allegro/printAllegro.h"
+//#include "Allegro/printAllegro.h"
 
 using namespace std;
 
@@ -15,9 +15,10 @@ using namespace std;
 #define WIDTH NCOLS*20
 #define HEIGHT NROWS*20
 
-#define v(r,c) ((r)*(NCOLS)+(c))
+#define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c))
+#define h(r,c) ((r)*(NCOLS)+(c))
 MPI_Datatype bigMtype;
-MPI_Datatype columnType;
+MPI_Datatype columnType, rec;
 
 int xPartitions, yPartitions, nThreads, steps;
 int *readM;
@@ -26,7 +27,7 @@ int *bigM;
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
 
 //variabili allegro
-printAllegro printAl;
+//printAllegro printAl;
 
 //BITMAP *buffer;
 int nero, bianco;
@@ -44,7 +45,6 @@ void loadConfiguration(){
     }
 }
 void loadBigM(){
-        bigM = new int[NCOLS*NROWS];
         ifstream Input("Input.txt");
         if(Input.is_open()){
             char c;
@@ -72,31 +72,37 @@ void initAutoma(){
         int dest=1;
         for(int i=0; i<NROWS/yPartitions+2; i++){
             for(int j=0; j<NCOLS/xPartitions+2; j++){
+                writeM[v(i,j)]=0;
                 if(i==0 || i==NROWS/yPartitions+1 || j==0 || j==NCOLS/xPartitions+1)
                     readM[v(i,j)]=0;
-                else
-                    readM[v(i,j)]=bigM[v(i-1,j-1)];
+                else{
+                    readM[v(i,j)]=bigM[h(i-1,j-1)];
+                    }
             }
         }
         for(int i=0; i<yPartitions; i++){
             for(int j=0; j<xPartitions; j++){
                 if(i==0 && j==0){
                     continue;
-                }else
-                    MPI_Send(&bigM[v(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 0, MPI_COMM_WORLD);
-                dest++;
+                }else{
+                    
+                    MPI_Send(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 0, MPI_COMM_WORLD);
+                dest++;}
                 
             }
         } 
         
 
     }else{
+        MPI_Status stat;
         for(int i=0; i<NROWS/yPartitions+2; i++){
             for(int j=0; j<NCOLS/xPartitions+2; j++){
                 readM[v(i,j)]=0;
+                writeM[v(i,j)]=0;
             }
         }
-        MPI_Recv(&readM[v(1,1)], 1, bigMtype, 0, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        MPI_Recv(&readM[v(1,1)], 1, rec, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &stat);
+        
         
     }
    
@@ -154,20 +160,26 @@ int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
     MPI_Comm_size( MPI_COMM_WORLD, &nProc);
-
+if(Rank==0)
+        bigM=new int[NROWS*NCOLS];
     init();
 
-    //inizializzo allegro
-    printAl.initAllegro(Rank, WIDTH, HEIGHT);
 
-    MPI_Type_vector(NROWS/xPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &bigMtype);
+
+    //inizializzo allegro
+    //printAl.initAllegro(Rank, WIDTH, HEIGHT);
+
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &rec);
+    MPI_Type_commit(&rec);  
     MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
     MPI_Type_commit(&columnType);
     
 
     readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
+    
 
     rankUp = (Rank - xPartitions);
     if(rankUp<0)
@@ -192,26 +204,23 @@ int main(int argc, char *argv[]) {
 
     initAutoma();
 
+    
     //disegno con allegro
-    printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
+    //printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
 
-    //for(int i=0; i<steps; i++){
-    exchBoard();
-        //transFunc();
-      //  swap();
-    //}
+    
     if(Rank==0){
     for(int i=0; i<NROWS/yPartitions+2; i++){
         for(int j=0; j<NCOLS/xPartitions+2; j++){
             printf("%d ", readM[v(i, j)]);
         }
         printf("\n");
-    }} //drawWithAllegro();
+    }} 
 
-    delete[] readM;
-    delete[] writeM;
-    if(Rank==0)
-        delete[] bigM;  
+    //delete[] readM;
+    //delete[] writeM;
+    //if(Rank==0)
+      //  delete[] bigM;  
     MPI_Finalize();  
 	return 0;
 }
