@@ -6,6 +6,8 @@
 #include <iostream>
 //#include <allegro.h>
 #include <cmath>
+#include <pthread.h>
+#include <queue>
 //#include "Allegro/printAllegro.h"
 
 using namespace std;
@@ -19,12 +21,21 @@ using namespace std;
 #define h(r,c) ((r)*(NCOLS)+(c))
 MPI_Datatype bigMtype;
 MPI_Datatype columnType, rec;
+MPI_Datatype sendPrint;
 
 int xPartitions, yPartitions, nThreads, steps;
 int *readM;
 int *writeM;
 int *bigM;
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
+//Gestione pthread con thread pool
+struct cell{
+    int i;
+    int j;
+};
+queue<cell> q;
+
+pthread_t *threads;
 
 //variabili allegro
 //printAllegro printAl;
@@ -64,6 +75,7 @@ void loadBigM(){
 
 void init(){
     loadConfiguration();
+    threads=new pthread_t[nThreads];
     if(Rank==0)
         loadBigM();
 }
@@ -72,7 +84,6 @@ void initAutoma(){
         int dest=1;
         for(int i=0; i<NROWS/yPartitions+2; i++){
             for(int j=0; j<NCOLS/xPartitions+2; j++){
-                writeM[v(i,j)]=0;
                 if(i==0 || i==NROWS/yPartitions+1 || j==0 || j==NCOLS/xPartitions+1)
                     readM[v(i,j)]=0;
                 else{
@@ -98,7 +109,6 @@ void initAutoma(){
         for(int i=0; i<NROWS/yPartitions+2; i++){
             for(int j=0; j<NCOLS/xPartitions+2; j++){
                 readM[v(i,j)]=0;
-                writeM[v(i,j)]=0;
             }
         }
         MPI_Recv(&readM[v(1,1)], 1, rec, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &stat);
@@ -126,6 +136,34 @@ void exchBoard(){
 	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
 
 
+}
+void print(){
+    //I processi mandano la loro porzione al processo 0 per stampare
+    if(Rank!=0){
+        MPI_Send(&readM[v(1,1)], 1, sendPrint, 0, 29, MPI_COMM_WORLD);
+    }else{
+        int dest=1;
+        MPI_Status stat;
+        for(int i=0; i<yPartitions; i++){
+            for(int j=0; j<xPartitions; j++){
+                if(i==0 && j==0){
+                    continue;
+                }else{
+                    
+                    MPI_Recv(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 29, MPI_COMM_WORLD, &stat);
+                dest++;}
+                
+            }
+        } }
+//Stampa di bigM (adesso senza allegro)
+    if(Rank==0){
+    for(int i=0; i<NROWS; i++){
+        for(int j=0; j<NCOLS; j++){
+            printf("%d ", bigM[h(i, j)]);
+        }
+        printf("\n");
+    }
+    printf("-----------------------------------------------\n");}
 }
 inline void transitionFunction(int i, int j){
     int cont=0;// Conto i vicini vivi
@@ -175,6 +213,9 @@ if(Rank==0)
     MPI_Type_commit(&rec);  
     MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
     MPI_Type_commit(&columnType);
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &sendPrint);
+    MPI_Type_commit(&sendPrint);  
+    
     
 
     readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
@@ -208,19 +249,24 @@ if(Rank==0)
     //disegno con allegro
     //printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
 
-    
-    if(Rank==0){
-    for(int i=0; i<NROWS/yPartitions+2; i++){
-        for(int j=0; j<NCOLS/xPartitions+2; j++){
-            printf("%d ", readM[v(i, j)]);
-        }
-        printf("\n");
-    }} 
+    for(int i=0; i<steps; i++){
+        exchBoard();
+        transFunc();
+        print();
+        swap();
 
-    //delete[] readM;
-    //delete[] writeM;
-    //if(Rank==0)
-      //  delete[] bigM;  
+    }
+    
+
+    delete[] readM;
+    delete[] writeM;
+    if(Rank==0)
+        delete[] bigM;  
+    MPI_Type_free(&bigMtype);
+    MPI_Type_free(&rec);
+    MPI_Type_free(&columnType);
+    MPI_Type_free(&sendPrint);
+
     MPI_Finalize();  
 	return 0;
 }
