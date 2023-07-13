@@ -4,12 +4,15 @@
 #include <mpi.h>
 #include <fstream>
 #include <iostream>
-#include <allegro.h>
 #include <cmath>
+#include "Allegro/printAllegro.h"
+
 using namespace std;
 
 #define NCOLS 20
 #define NROWS 8
+#define WIDTH NCOLS*20
+#define HEIGHT NROWS*20
 
 #define v(r,c) ((r)*(NCOLS)+(c))
 MPI_Datatype bigMtype, columnType;
@@ -21,10 +24,8 @@ int *bigM;
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
 
 //variabili allegro
-BITMAP *buffer;
-int nero, bianco;
-#define WIDTH NCOLS*20
-#define HEIGHT NROWS*20
+printAllegro printAl;
+
 
 void loadConfiguration(){
     ifstream configurazione("Configuration.txt");
@@ -97,42 +98,6 @@ void initAutoma(){
 
 }
 
-void initAllegro() {
-	allegro_init();
-    install_keyboard();
-	set_color_depth(24);
-	buffer = create_bitmap(WIDTH, HEIGHT);
-	set_gfx_mode(GFX_AUTODETECT_WINDOWED, WIDTH, HEIGHT, 0, 0);
-
-    char windowTitle[50];
-    sprintf(windowTitle, "Process %d", Rank);
-    set_window_title(windowTitle);
-
-	nero = makecol(0, 0, 0);
-	bianco = makecol(255, 255, 255);
-}
-
-void drawWithAllegro() {
-    int const CELL_WIDTH = WIDTH / (NCOLS / xPartitions);
-    int const CELL_HEIGHT = HEIGHT / (NROWS / yPartitions);
-
-	for (int i = 1; i < NROWS/yPartitions+1; i++)
-		for (int j = 1; j < NCOLS/xPartitions+1; j++){
-            int x = (i-1) * CELL_HEIGHT;
-            int y = (j-1) * CELL_WIDTH;
-            switch (readM[v(i, j)]) {
-			case 0:
-				rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, nero);
-				break;
-			case 1:
-				rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, bianco);
-				break;
-			}
-        }
-	blit(buffer, screen, 0, 0, 0, 0, WIDTH, HEIGHT);
-    readkey();
-}
-
 void exchBoard(){
     MPI_Request request;
     MPI_Status status;
@@ -186,7 +151,7 @@ int main(int argc, char *argv[]) {
     init();
 
     //inizializzo allegro
-    initAllegro();
+    printAl.initAllegro(Rank, WIDTH, HEIGHT);
 
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*2, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
@@ -218,7 +183,10 @@ int main(int argc, char *argv[]) {
 
 
     initAutoma();
-    drawWithAllegro();
+
+    //disegno con allegro
+    printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, readM, Rank);
+
     //for(int i=0; i<steps; i++){
         exchBoard();
         //transFunc();
@@ -232,16 +200,11 @@ int main(int argc, char *argv[]) {
         printf("\n");
     }}
 
-
-    
-
-    
     delete[] readM;
     delete[] writeM;
     if(Rank==0)
         delete[] bigM;  
     MPI_Finalize();  
 	return 0;
-
 }
 END_OF_MAIN();
