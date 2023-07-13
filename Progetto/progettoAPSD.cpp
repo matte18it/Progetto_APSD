@@ -32,7 +32,8 @@ int controlledCell=0;
 bool ending=false;
 //Gestione pthread con thread pool
 pthread_mutex_t mutex;
-pthread_cond_t cond;
+pthread_cond_t cond ;
+
 void transitionFunction(int x, int y){
     int cont=0;// Conto i vicini vivi
 	for(int di=-1;di<2;di++)
@@ -62,7 +63,7 @@ struct cell{
 };
 queue<cell> q;
 void * run(void * arg){
-    while (!ending && !q.empty()){
+    while (!ending || !q.empty()){
     pthread_mutex_lock(&mutex);
     while (q.empty())
         pthread_cond_wait(&cond, &mutex);
@@ -70,7 +71,9 @@ void * run(void * arg){
     cell c=q.front();
     q.pop();
     pthread_mutex_unlock(&mutex);
-    transitionFunction(c.i, c.j);}
+    transitionFunction(c.i, c.j);
+    
+    }
     
     
     
@@ -212,13 +215,17 @@ void print(){
 inline void transFunc(){   
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
-            cell  c(i,j);
-            if(q.empty()){
-                q.push(c);
-                pthread_cond_signal(&cond);
-            }
+            cell c(i,j);
+            q.push(c);
+            pthread_cond_broadcast(&cond);
+            
 			}}}
 void swap(){
+   
+    while (!q.empty()) {
+        sleep(1);
+    }
+    
     int * p=readM;
     readM=writeM;
     writeM=p;}
@@ -288,12 +295,14 @@ if(Rank==0)
 
     for(int i=0; i<steps; i++){
         exchBoard();
-        transFunc();
+       
         print();
+        transFunc();
         swap();
-
     }
+    printf("ciao");
     ending=true;
+    pthread_cond_broadcast(&cond);
     for(int i=0; i<nThreads; i++){
         pthread_join(threads[i], NULL);
     }
