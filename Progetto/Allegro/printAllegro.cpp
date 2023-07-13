@@ -23,7 +23,7 @@ void printAllegro::drawWithAllegro(int NCOLS, int xPartitions, int yPartitions, 
 		for (int j = 1; j < NCOLS/xPartitions+1; j++){
             int x = (i-1) * CELL_HEIGHT;
             int y = (j-1) * CELL_WIDTH;
-            printf("X1:%d   X2:%d   Y1:%d   Y2:%d, i:%d    j:%d   readM:%d   rank:%d\n", x, x+CELL_HEIGHT, y, y+CELL_WIDTH, i, j, readM[v(i, j)], Rank);
+            printf("X1:%d   X2:%d   Y1:%d   Y2:%d, i:%d    j:%d    readM:%d   rank:%d\n", x, x+CELL_HEIGHT, y, y+CELL_WIDTH, i, j, readM[v(i, j)], Rank);
             switch (readM[v(i, j)]) {
 			case 0:
 				rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, nero);
