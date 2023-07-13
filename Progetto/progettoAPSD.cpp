@@ -28,12 +28,55 @@ int *readM;
 int *writeM;
 int *bigM;
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
+int controlledCell=0;
+bool ending=false;
 //Gestione pthread con thread pool
+pthread_mutex_t mutex;
+pthread_cond_t cond;
+void transitionFunction(int x, int y){
+    int cont=0;// Conto i vicini vivi
+	for(int di=-1;di<2;di++)
+		for(int dj=-1;dj<2;dj++)
+			if ((di!=0 || dj!=0) &&readM[v((x+di+NROWS)%NROWS,(y+dj+NCOLS)%NCOLS)]==1)
+				cont++;
+	// Regole Gioco della Vita
+    pthread_mutex_lock(&mutex);
+	if (readM[v(x,y)]==1)
+		if (cont==2 || cont ==3)
+			writeM[v(x,y)]=1;
+		else
+			writeM[v(x,y)]=0;
+	else
+		if (cont ==3)
+			writeM[v(x,y)]=1;
+		else
+			writeM[v(x,y)]=0;
+    pthread_mutex_unlock(&mutex);
+}
+
 struct cell{
+    cell(int i, int j):i(i), j(j){}
+    cell(){}
     int i;
     int j;
 };
 queue<cell> q;
+void * run(void * arg){
+    while (!ending && !q.empty()){
+    pthread_mutex_lock(&mutex);
+    while (q.empty())
+        pthread_cond_wait(&cond, &mutex);
+
+    cell c=q.front();
+    q.pop();
+    pthread_mutex_unlock(&mutex);
+    transitionFunction(c.i, c.j);}
+    
+    
+    
+return NULL;
+}
+
 
 pthread_t *threads;
 
@@ -165,35 +208,28 @@ void print(){
     }
     printf("-----------------------------------------------\n");}
 }
-inline void transitionFunction(int i, int j){
-    int cont=0;// Conto i vicini vivi
-	for(int di=-1;di<2;di++)
-		for(int dj=-1;dj<2;dj++)
-			if ((di!=0 || dj!=0) &&readM[v((i+di+NROWS)%NROWS,(j+dj+NCOLS)%NCOLS)]==1)
-				cont++;
-	// Regole Gioco della Vita
-	if (readM[v(i,j)]==1)
-		if (cont==2 || cont ==3)
-			writeM[v(i,j)]=1;
-		else
-			writeM[v(i,j)]=0;
-	else
-		if (cont ==3)
-			writeM[v(i,j)]=1;
-		else
-			writeM[v(i,j)]=0;
 
-}
 inline void transFunc(){   
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
-			transitionFunction(i,j);
+            cell  c(i,j);
+            if(q.empty()){
+                q.push(c);
+                pthread_cond_signal(&cond);
+            }
 			}}}
 void swap(){
     int * p=readM;
     readM=writeM;
     writeM=p;}
 
+void initPthread(){
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
+    for(int i=0; i<nThreads; i++){
+        pthread_create(&threads[i], NULL, &run, NULL);
+    }
+}
 int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
@@ -244,6 +280,7 @@ if(Rank==0)
 
 
     initAutoma();
+    initPthread();
 
     
     //disegno con allegro
@@ -256,6 +293,12 @@ if(Rank==0)
         swap();
 
     }
+    ending=true;
+    for(int i=0; i<nThreads; i++){
+        pthread_join(threads[i], NULL);
+    }
+    pthread_cond_destroy(&cond);
+    pthread_mutex_destroy(&mutex);
     
 
     delete[] readM;
