@@ -169,7 +169,7 @@ void loadConfiguration(){ //Carcamento parametri da file di configurazione
         configurazione >> xPartitions >> yPartitions >> nThreads >> steps;
         configurazione.close();
     }else{
-        printf("Errore nell'apertura del file di configurazione");
+        printf("Error opening configuration file!");
         exit(1);
     }
 }
@@ -187,7 +187,7 @@ void loadBigM(){ //Carcamento matrice globale da file
         } 
             Input.close();
         }else{
-            printf("Errore nell'apertura del file di Input");
+            printf("Error opening Input file!");
             exit(1);
     } 
 }
