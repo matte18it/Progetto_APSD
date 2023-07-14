@@ -19,7 +19,7 @@
 #define h(r,c) ((r)*(NCOLS)+(c)) 
 
 //definizione dei Datatype
-MPI_Datatype bigMtype, columnType, rec, sendPrint;
+MPI_Datatype bigMtype, columnType, rec;
 
 //dati da leggere dal file di configurazione
 int xPartitions, yPartitions, nThreads, steps;
@@ -83,14 +83,16 @@ int main(int argc, char *argv[]) {
         printAl.initAllegro(Rank, WIDTH, HEIGHT);
 
     //definizione dei Datatype
+    //salvataggio dei dati da matrice locale a globale
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
+    //salvataggio dei dati da matrice globale a locale
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &rec);
     MPI_Type_commit(&rec);  
+    //invio e ricezione di una colonna in matrici locali
     MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
     MPI_Type_commit(&columnType);
-    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &sendPrint);
-    MPI_Type_commit(&sendPrint);  
+   
     
     //calcolo dei rank vicini
     rankUp = (Rank - xPartitions);
@@ -145,7 +147,6 @@ int main(int argc, char *argv[]) {
     MPI_Type_free(&bigMtype);
     MPI_Type_free(&rec);
     MPI_Type_free(&columnType);
-    MPI_Type_free(&sendPrint);
 
     MPI_Finalize();  
 	return 0;
@@ -272,7 +273,7 @@ void exchBoard(){   //Scambio bordi fra vicini
 void print(int step){
     //I processi mandano la loro porzione al processo 0 per stampare
     if(Rank!=0){
-        MPI_Send(&readM[v(1,1)], 1, sendPrint, 0, 29, MPI_COMM_WORLD);
+        MPI_Send(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD);
     }else{
         int dest=1;
         MPI_Status stat;
