@@ -46,12 +46,13 @@ struct cell{  // Struttura per la coda di celle da calcolare
 };
 std::queue<cell> q;
 
-pthread_mutex_t mutex;
-pthread_cond_t cond ;
-pthread_t *threads;
+pthread_mutex_t mutex, mutexWait;
+pthread_cond_t cond, condWait ;
+pthread_t *threads, threadWait;
 
 //thread function
 void * run(void * arg);
+void * runWait(void * arg);
 //funzione di transizione
 void transitionFunction(int x, int y);
 
@@ -60,7 +61,7 @@ void loadBigM();
 void init();
 void initAutoma();
 void exchBoard();
-void print();
+void print(int step);
 void transFunc();
 void swap();
 
@@ -116,13 +117,15 @@ int main(int argc, char *argv[]) {
     //inizializzazione pthread
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cond, NULL);
+    pthread_mutex_init(&mutexWait, NULL);
+    pthread_cond_init(&condWait, NULL);
     for(int i=0; i<nThreads; i++){
         pthread_create(&threads[i], NULL, &run, NULL);
     }
     for(int i=0; i<steps; i++){ //Main loop
         exchBoard();  
-        print();     
-        transFunc();  
+        print(i);  
+        transFunc(); 
         swap();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }
@@ -215,6 +218,8 @@ void initAutoma(){
 }
 void * run(void * arg){ //thread function, ogni thread prende una cella dalla coda e la elabora
     while( !ending){
+        if(q.empty())
+            pthread_cond_signal(&condWait);
         pthread_mutex_lock(&mutex);
     while (q.empty() && !ending)
         pthread_cond_wait(&cond, &mutex);
@@ -223,9 +228,9 @@ void * run(void * arg){ //thread function, ogni thread prende una cella dalla co
         q.pop();
         pthread_mutex_unlock(&mutex);
         transitionFunction(c.i, c.j);
-        }else
+        }else{
             pthread_mutex_unlock(&mutex);
-             }
+             }}
     return NULL;
 }
 void transitionFunction(int x, int y){  //Funzione di transizione
@@ -252,24 +257,26 @@ void exchBoard(){   //Scambio bordi fra vicini
     MPI_Request request;
     MPI_Status status;
     int c;
+    //colonne
     MPI_Send(&readM[v(0,NCOLS/xPartitions)], 1, columnType, rankRight, 17, MPI_COMM_WORLD);
     MPI_Send(&readM[v(0,1)], 1, columnType, rankLeft, 20, MPI_COMM_WORLD);
     MPI_Recv(&readM[v(0,0)], 1, columnType, rankLeft, 17, MPI_COMM_WORLD, &status);
     MPI_Recv(&readM[v(0,NCOLS/xPartitions+1)], 1, columnType, rankRight, 20, MPI_COMM_WORLD, &status);
-    
 
+    //colonne
     MPI_Send(&readM[v(NROWS/yPartitions,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 12, MPI_COMM_WORLD);
 	MPI_Send(&readM[v(1,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 15, MPI_COMM_WORLD);
 	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
 	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
 }
-void print(){
+void print(int step){
     //I processi mandano la loro porzione al processo 0 per stampare
     if(Rank!=0){
         MPI_Send(&readM[v(1,1)], 1, sendPrint, 0, 29, MPI_COMM_WORLD);
     }else{
         int dest=1;
         MPI_Status stat;
+        printf("Step:  %d \n",step+1);
         for(int i=0; i<yPartitions; i++){
             for(int j=0; j<xPartitions; j++){
                 if(i==0 && j==0){
@@ -303,15 +310,21 @@ void print(){
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
             cell c(i,j);
-           
             q.push(c);
             pthread_cond_broadcast(&cond);
-            
-			}}}
-void swap(){    //swap fra matrici
-    while (!q.empty()) {
-        sleep(0.1);
+			}}
+            pthread_create(&threadWait, NULL, &runWait, NULL);}
+
+void * runWait(void *arg){ //funzione che mette in attesa il processo della fine dei thread
+    pthread_mutex_lock(&mutexWait);
+    while(!q.empty()){
+        pthread_cond_wait(&condWait, &mutexWait);
     }
+    pthread_mutex_unlock(&mutexWait);
+    return NULL;
+}
+void swap(){    //swap fra matrici
+    pthread_join(threadWait, NULL);
     int * p=readM;
     readM=writeM;
     writeM=p;
