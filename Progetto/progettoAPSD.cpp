@@ -1,9 +1,10 @@
 #include <mpi.h>
 #include <fstream>
 #include <pthread.h>
-#include <thread> //per lo sleep
 #include <queue>
-#include "Allegro/printAllegro.h"
+#include <unistd.h>
+#include <thread>       //per lo sleep
+#include <allegro.h>    //libreria per allegro
 
 //colonne e righe della matrice
 #define NCOLS 20
@@ -35,7 +36,8 @@ int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
 bool ending=false;
 
 //variabili allegro
-printAllegro printAl;
+BITMAP *buffer;         //creazione della bitmap, finestra in cui vado a disegnare   
+int nero, bianco;       //variabili per contenere i colori, nero per lo sfondo e bianco per disegnare
 
 //Gestione pthread con thread pool
 struct cell{  // Struttura per la coda di celle da calcolare
@@ -65,6 +67,10 @@ void print(int step);
 void transFunc();
 void swap();
 
+//funzioni allegro
+void initAllegro();         //funzione per inizializzare allegro
+void drawWithAllegro(int step);     //funzione per disegnare con allegro
+
 int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
@@ -80,7 +86,7 @@ int main(int argc, char *argv[]) {
 
     //inizializzo allegro sul rank 0
     if(Rank == 0)
-        printAl.initAllegro(Rank, WIDTH, HEIGHT);
+        initAllegro();
 
     //definizione dei Datatype
     //salvataggio dei dati da matrice locale a globale
@@ -93,7 +99,6 @@ int main(int argc, char *argv[]) {
     MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
     MPI_Type_commit(&columnType);
    
-    
     //calcolo dei rank vicini
     rankUp = (Rank - xPartitions);
     if(rankUp<0)
@@ -274,7 +279,8 @@ void print(int step){
     //I processi mandano la loro porzione al processo 0 per stampare
     if(Rank!=0){
         MPI_Send(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD);
-    }else{
+    }
+    else {
         int dest=1;
         MPI_Status stat;
         printf("Step:  %d \n",step+1);
@@ -283,19 +289,21 @@ void print(int step){
                 if(i==0 && j==0){
                     for(int c=1; c<NROWS/yPartitions+1; c++){
                         for(int r=1; r<NCOLS/xPartitions+1; r++){
-                        bigM[h(c-1,r-1)]=readM[v(c,r)];
+                            bigM[h(c-1,r-1)]=readM[v(c,r)];
                         }
                     }
                 }else{
                     MPI_Recv(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 29, MPI_COMM_WORLD, &stat);
-                dest++;}
-                
+                    dest++;
+                } 
             }
-        } }
+        } 
+    }
+
     //Stampa di bigM
     if(Rank==0){
         //disegno con allegro sul rank 0
-        printAl.drawWithAllegro(NCOLS, xPartitions, yPartitions, NROWS, WIDTH, HEIGHT, bigM);
+        drawWithAllegro(step);
 
         //stampo sul terminale senza allegro
         for(int i=0; i<NROWS; i++){
@@ -307,14 +315,16 @@ void print(int step){
         printf("-----------------------------------------------\n");
     }
 }
- void transFunc(){   //funzione di aggiunta task alla thread pool
+
+void transFunc(){   //funzione di aggiunta task alla thread pool
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
             cell c(i,j);
             q.push(c);
             pthread_cond_broadcast(&cond);
 			}}
-            pthread_create(&threadWait, NULL, &runWait, NULL);}
+            pthread_create(&threadWait, NULL, &runWait, NULL);
+}
 
 void * runWait(void *arg){ //funzione che mette in attesa il processo della fine dei thread
     pthread_mutex_lock(&mutexWait);
@@ -329,6 +339,66 @@ void swap(){    //swap fra matrici
     int * p=readM;
     readM=writeM;
     writeM=p;
-    }
+}
 
 
+//----------ALLEGRO----------
+//funzione per inizializzare allegro
+void initAllegro(){
+	//inizializzo allegro
+    allegro_init();
+
+	//setto i colori per le altre funzioni
+	set_color_depth(24);
+
+	//creo lo schermo in cui vado a disegnare...
+	buffer = create_bitmap(WIDTH, HEIGHT);
+	//...e definisco di metterla nella finestra
+	set_gfx_mode(GFX_AUTODETECT_WINDOWED, WIDTH, HEIGHT, 0, 0);
+
+	//con queste tre istruzioni vado a settare un titolo alla finestra che vado a creare
+    char windowTitle[50];
+    sprintf(windowTitle, "Allegro Screen");
+    set_window_title(windowTitle);
+
+	//inizializzo i colori bianco e nero
+	nero = makecol(0, 0, 0);
+	bianco = makecol(255, 255, 255);
+}
+
+//Funzione per disegnare
+void drawWithAllegro(int step){
+	//NOTA: questa funzione si adatta alle varie dimensioni di input ricalcolando sempre altezza e larghezza di ogni blocco in base al numero di righe e colonne
+
+	//qua vado a calcolare larghezza e altezza di ogni singolo quadrato che vado a disegnare
+    int const CELL_WIDTH = WIDTH / NCOLS;
+    int const CELL_HEIGHT = HEIGHT / NROWS;
+
+	//qui faccio partire un doppio ciclo for per scorrere la matrice e disegnare.
+	for (int i = 0; i < NROWS; i++)
+		for (int j = 0; j < NCOLS; j++){
+			//calcolo la x e la y iniziale di ogni blocco che devo disegnare
+            int x = i * CELL_HEIGHT;
+            int y = j * CELL_WIDTH;
+
+            //switch per verificare contenuto della cella della matrice
+			switch (bigM[h(i, j)]) {
+				case 0:
+					//se la cella (i, j) è 0 vado a disegnare un quadrato nero.
+					//parte dalla posizione x, y e si sviluppa in larghezza di y+CELL_WIDTH; si sviluppa in altezza di x+CELL_HEIGHT
+					rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, nero);
+					break;
+				case 1:
+					//se la cella (i, j) è 1 vado a disegnare un quadrato bianco.
+					//parte dalla posizione x, y e si sviluppa in larghezza di y+CELL_WIDTH; si sviluppa in altezza di x+CELL_HEIGHT
+					rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, bianco);
+					break;
+			}
+        }
+
+    //visualizzo le step su schermo allegro
+    textprintf_ex(buffer, font, 0, 0, bianco, nero, "Step: %d", step);
+
+	//mando il buffer sullo schermo
+	blit(buffer, screen, 0, 0, 0, 0, WIDTH, HEIGHT);
+}
