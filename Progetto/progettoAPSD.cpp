@@ -1,41 +1,173 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <mpi.h>
 #include <fstream>
-#include <iostream>
-#include <cmath>
 #include <pthread.h>
-
-//per lo sleep
-#include <thread>
-
+#include <thread> //per lo sleep
 #include <queue>
 #include "Allegro/printAllegro.h"
 
-using namespace std;
-
+//colonne e righe della matrice
 #define NCOLS 20
 #define NROWS 8
+
 #define WIDTH NCOLS*40
 #define HEIGHT NROWS*40
 
-#define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c))
-#define h(r,c) ((r)*(NCOLS)+(c))
-MPI_Datatype bigMtype;
-MPI_Datatype columnType, rec;
-MPI_Datatype sendPrint;
+//macro per accedere alla matrice locale
+#define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c)) 
 
+//macro per accedere alla matrice globale
+#define h(r,c) ((r)*(NCOLS)+(c)) 
+
+//definizione dei Datatype
+MPI_Datatype bigMtype, columnType, rec, sendPrint;
+
+//dati da leggere dal file di configurazione
 int xPartitions, yPartitions, nThreads, steps;
+//matrici locali
 int *readM;
 int *writeM;
+//matrice globale
 int *bigM;
+//rank
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
-int controlledCell=0;
+//variabili per la gestione della fine dei pthread
 bool ending=false;
+
+//variabili allegro
+printAllegro printAl;
+
 //Gestione pthread con thread pool
+struct cell{  // Struttura per la coda di celle da calcolare
+    cell(int i, int j):i(i), j(j){}
+    cell(){}
+    int i;
+    int j;
+};
+std::queue<cell> q;
 pthread_mutex_t mutex;
 pthread_cond_t cond ;
+pthread_t *threads;
 
+//thread function
+void * run(void * arg);
+//funzione di transizione
+void transitionFunction(int x, int y);
+
+void loadConfiguration();
+void loadBigM();
+void init();
+void initAutoma();
+void exchBoard();
+void print();
+void transFunc();
+void swap();
+void initPthread();
+
+int main(int argc, char *argv[]) {
+    MPI_Init( &argc, &argv );    
+    MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
+    MPI_Comm_size( MPI_COMM_WORLD, &nProc);
+if(Rank==0)
+        bigM=new int[NROWS*NCOLS];
+    init();
+
+
+
+    //inizializzo allegro sul rank 0
+    if(Rank == 0)
+        printAl.initAllegro(Rank, WIDTH, HEIGHT);
+
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
+    MPI_Type_commit(&bigMtype);  
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &rec);
+    MPI_Type_commit(&rec);  
+    MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
+    MPI_Type_commit(&columnType);
+    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &sendPrint);
+    MPI_Type_commit(&sendPrint);  
+    
+    
+
+    readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
+    writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
+    
+
+    rankUp = (Rank - xPartitions);
+    if(rankUp<0)
+        rankUp = (rankUp+nProc);
+    rankDown = (Rank + xPartitions);
+    if(rankDown>=nProc)
+        rankDown = (rankDown%nProc);
+    
+    float colonna=Rank/xPartitions;
+    float colonnameno=(Rank-1)/xPartitions;
+    if(Rank-1<0 || colonnameno<colonna)
+        rankLeft = (Rank+xPartitions-1);
+    else
+        rankLeft = (Rank-1);
+    float colonnapiu=(Rank+1)/xPartitions;
+    if(Rank+1>=nProc || colonnapiu>colonna)
+        rankRight = (Rank-xPartitions+1);
+    else
+        rankRight = (Rank+1);
+       
+
+
+    initAutoma();
+    initPthread();
+
+    for(int i=0; i<steps; i++){
+        exchBoard();
+        print();
+        transFunc();
+        swap();
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+    }
+    ending=true;
+    pthread_cond_broadcast(&cond);
+    for(int i=0; i<nThreads; i++){
+        pthread_join(threads[i], NULL);
+    }
+    pthread_cond_destroy(&cond);
+    pthread_mutex_destroy(&mutex);
+    
+
+    delete[] readM;
+    delete[] writeM;
+    if(Rank==0)
+        delete[] bigM;  
+    MPI_Type_free(&bigMtype);
+    MPI_Type_free(&rec);
+    MPI_Type_free(&columnType);
+    MPI_Type_free(&sendPrint);
+
+    MPI_Finalize();  
+	return 0;
+    END_OF_MAIN();
+}
+
+
+
+
+
+
+
+void * run(void * arg){
+    while( !ending){
+        pthread_mutex_lock(&mutex);
+    while (q.empty() && !ending)
+        pthread_cond_wait(&cond, &mutex);
+    if(!q.empty()){
+        cell c=q.front();
+        q.pop();
+        pthread_mutex_unlock(&mutex);
+        transitionFunction(c.i, c.j);
+        }else
+            pthread_mutex_unlock(&mutex);
+             }
+    return NULL;
+}
 void transitionFunction(int x, int y){
     int cont=0;// Conto i vicini vivi
 	for(int di=-1;di<2;di++)
@@ -57,43 +189,16 @@ void transitionFunction(int x, int y){
     pthread_mutex_unlock(&mutex);
 }
 
-struct cell{
-    cell(int i, int j):i(i), j(j){}
-    cell(){}
-    int i;
-    int j;
-};
-queue<cell> q;
-void run2(){
-    pthread_mutex_lock(&mutex);
-    while (q.empty() && !ending)
-        pthread_cond_wait(&cond, &mutex);
-    if(!q.empty()){
-    cell c=q.front();
-    q.pop();
-    pthread_mutex_unlock(&mutex);
-    transitionFunction(c.i, c.j);}
-    else
-        pthread_mutex_unlock(&mutex);
-}
-void * run(void * arg){
-    
-    while( !ending){
-       
-        run2();
-        }
-
-return NULL;
-}
 
 
-pthread_t *threads;
 
-//variabili allegro
-printAllegro printAl;
+
+
+
+
 
 void loadConfiguration(){
-    ifstream configurazione("Configuration.txt");
+    std::ifstream configurazione("Configuration.txt");
     if(configurazione.is_open()){
         configurazione >> xPartitions >> yPartitions >> nThreads >> steps;
         configurazione.close();
@@ -103,7 +208,7 @@ void loadConfiguration(){
     }
 }
 void loadBigM(){
-        ifstream Input("Input.txt");
+        std::ifstream Input("Input.txt");
         if(Input.is_open()){
             char c;
             int i=0;
@@ -247,87 +352,3 @@ void initPthread(){
         pthread_create(&threads[i], NULL, &run, NULL);
     }
 }
-int main(int argc, char *argv[]) {
-    MPI_Init( &argc, &argv );    
-    MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
-    MPI_Comm_size( MPI_COMM_WORLD, &nProc);
-if(Rank==0)
-        bigM=new int[NROWS*NCOLS];
-    init();
-
-
-
-    //inizializzo allegro sul rank 0
-    if(Rank == 0)
-        printAl.initAllegro(Rank, WIDTH, HEIGHT);
-
-    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
-    MPI_Type_commit(&bigMtype);  
-    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &rec);
-    MPI_Type_commit(&rec);  
-    MPI_Type_vector(NROWS/yPartitions+2, 1, NCOLS/xPartitions+2, MPI_INT, &columnType);    
-    MPI_Type_commit(&columnType);
-    MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &sendPrint);
-    MPI_Type_commit(&sendPrint);  
-    
-    
-
-    readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
-    writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
-    
-
-    rankUp = (Rank - xPartitions);
-    if(rankUp<0)
-        rankUp = (rankUp+nProc);
-    rankDown = (Rank + xPartitions);
-    if(rankDown>=nProc)
-        rankDown = (rankDown%nProc);
-    
-    float colonna=Rank/xPartitions;
-    float colonnameno=(Rank-1)/xPartitions;
-    if(Rank-1<0 || colonnameno<colonna)
-        rankLeft = (Rank+xPartitions-1);
-    else
-        rankLeft = (Rank-1);
-    float colonnapiu=(Rank+1)/xPartitions;
-    if(Rank+1>=nProc || colonnapiu>colonna)
-        rankRight = (Rank-xPartitions+1);
-    else
-        rankRight = (Rank+1);
-       
-
-
-    initAutoma();
-    initPthread();
-
-    for(int i=0; i<steps; i++){
-        exchBoard();
-        print();
-        transFunc();
-        swap();
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        
-    }
-    ending=true;
-    pthread_cond_broadcast(&cond);
-    for(int i=0; i<nThreads; i++){
-        pthread_join(threads[i], NULL);
-    }
-    pthread_cond_destroy(&cond);
-    pthread_mutex_destroy(&mutex);
-    
-
-    delete[] readM;
-    delete[] writeM;
-    if(Rank==0)
-        delete[] bigM;  
-    MPI_Type_free(&bigMtype);
-    MPI_Type_free(&rec);
-    MPI_Type_free(&columnType);
-    MPI_Type_free(&sendPrint);
-
-    MPI_Finalize();  
-	return 0;
-}
-
-END_OF_MAIN();
