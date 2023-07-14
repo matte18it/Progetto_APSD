@@ -10,8 +10,8 @@
 #define NCOLS 20
 #define NROWS 8
 
-#define WIDTH NCOLS*40
-#define HEIGHT NROWS*40
+#define WIDTH 800
+#define HEIGHT 320
 
 //macro per accedere alla matrice locale
 #define v(r,c) ((r)*(NCOLS/xPartitions+2)+(c)) 
