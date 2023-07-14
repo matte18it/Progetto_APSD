@@ -370,7 +370,7 @@ void initAllegro(){
 void drawWithAllegro(int step){
 	//NOTA: questa funzione si adatta alle varie dimensioni di input ricalcolando sempre altezza e larghezza di ogni blocco in base al numero di righe e colonne
 
-	//qua vado a calcolare larghezza e altezza di ogni singolo quadrato che vado a disegnare
+	//qua vado a calcolare larghezza e altezza di ogni singolo rettangolo che vado a disegnare
     int const CELL_WIDTH = WIDTH / NCOLS;
     int const CELL_HEIGHT = HEIGHT / NROWS;
 
@@ -384,12 +384,12 @@ void drawWithAllegro(int step){
             //switch per verificare contenuto della cella della matrice
 			switch (bigM[h(i, j)]) {
 				case 0:
-					//se la cella (i, j) è 0 vado a disegnare un quadrato nero.
+					//se la cella (i, j) è 0 vado a disegnare un rettangolo nero.
 					//parte dalla posizione x, y e si sviluppa in larghezza di y+CELL_WIDTH; si sviluppa in altezza di x+CELL_HEIGHT
 					rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, nero);
 					break;
 				case 1:
-					//se la cella (i, j) è 1 vado a disegnare un quadrato bianco.
+					//se la cella (i, j) è 1 vado a disegnare un rettangolo bianco.
 					//parte dalla posizione x, y e si sviluppa in larghezza di y+CELL_WIDTH; si sviluppa in altezza di x+CELL_HEIGHT
 					rectfill(buffer, y, x, y + CELL_WIDTH, x + CELL_HEIGHT, bianco);
 					break;
