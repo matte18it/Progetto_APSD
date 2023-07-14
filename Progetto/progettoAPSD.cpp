@@ -28,9 +28,10 @@ int *readM;
 int *writeM;
 //matrice globale
 int *bigM;
-//rank
+//rank e numero di processi
 int Rank, nProc, rankUp, rankDown, rankLeft, rankRight;
-//variabili per la gestione della fine dei pthread
+
+//variabile per la gestione della fine dei pthread
 bool ending=false;
 
 //variabili allegro
@@ -44,6 +45,7 @@ struct cell{  // Struttura per la coda di celle da calcolare
     int j;
 };
 std::queue<cell> q;
+
 pthread_mutex_t mutex;
 pthread_cond_t cond ;
 pthread_t *threads;
@@ -61,22 +63,25 @@ void exchBoard();
 void print();
 void transFunc();
 void swap();
-void initPthread();
 
 int main(int argc, char *argv[]) {
     MPI_Init( &argc, &argv );    
     MPI_Comm_rank( MPI_COMM_WORLD, &Rank );    
     MPI_Comm_size( MPI_COMM_WORLD, &nProc);
-if(Rank==0)
-        bigM=new int[NROWS*NCOLS];
-    init();
+     
+    init(); //caricamento parametri e matrici
 
+    //inizializzazione strutture dati con i dati presi da file
+    readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
+    writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
 
+    threads=new pthread_t[nThreads];
 
     //inizializzo allegro sul rank 0
     if(Rank == 0)
         printAl.initAllegro(Rank, WIDTH, HEIGHT);
 
+    //definizione dei Datatype
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)*xPartitions, MPI_INT, &bigMtype);
     MPI_Type_commit(&bigMtype);  
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &rec);
@@ -86,12 +91,7 @@ if(Rank==0)
     MPI_Type_vector(NROWS/yPartitions, NCOLS/xPartitions, (NCOLS/xPartitions)+2, MPI_INT, &sendPrint);
     MPI_Type_commit(&sendPrint);  
     
-    
-
-    readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
-    writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
-    
-
+    //calcolo dei rank vicini
     rankUp = (Rank - xPartitions);
     if(rankUp<0)
         rankUp = (rankUp+nProc);
@@ -110,19 +110,21 @@ if(Rank==0)
         rankRight = (Rank-xPartitions+1);
     else
         rankRight = (Rank+1);
-       
+    
+    initAutoma(); //Divisione della matrice globale in matrici locali
 
-
-    initAutoma();
-    initPthread();
-
-    for(int i=0; i<steps; i++){
-        exchBoard();
-        print();
-        transFunc();
+    //inizializzazione pthread
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
+    for(int i=0; i<nThreads; i++){
+        pthread_create(&threads[i], NULL, &run, NULL);
+    }
+    for(int i=0; i<steps; i++){ //Main loop
+        exchBoard();  
+        print();     
+        transFunc();  
         swap();
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        
     }
     ending=true;
     pthread_cond_broadcast(&cond);
@@ -136,7 +138,7 @@ if(Rank==0)
     delete[] readM;
     delete[] writeM;
     if(Rank==0)
-        delete[] bigM;  
+    delete[] bigM;  
     MPI_Type_free(&bigMtype);
     MPI_Type_free(&rec);
     MPI_Type_free(&columnType);
@@ -147,13 +149,71 @@ if(Rank==0)
     END_OF_MAIN();
 }
 
-
-
-
-
-
-
-void * run(void * arg){
+void init(){ //Carcamento parametri da file di configurazione
+    loadConfiguration();
+    if(Rank==0)
+        loadBigM(); //Rank 0 legge la matrice globale
+}
+void loadConfiguration(){ //Carcamento parametri da file di configurazione
+    std::ifstream configurazione("Configuration.txt");
+    if(configurazione.is_open()){
+        configurazione >> xPartitions >> yPartitions >> nThreads >> steps;
+        configurazione.close();
+    }else{
+        printf("Errore nell'apertura del file di configurazione");
+        exit(1);
+    }
+}
+void loadBigM(){ //Carcamento matrice globale da file
+        bigM = new int[NROWS*NCOLS];    
+        std::ifstream Input("Input.txt");
+        if(Input.is_open()){
+            char c;
+            int i=0;
+            while (Input.get(c)){
+                if(c!='0' && c!='1')
+                    continue;
+                bigM[i]=c - '0';
+                i++;
+        } 
+            Input.close();
+        }else{
+            printf("Errore nell'apertura del file di Input");
+            exit(1);
+    } 
+}
+void initAutoma(){
+    if(Rank==0){  //Rank 0 prende la prima parte della matrice globale
+        int dest=1;
+        for(int i=0; i<NROWS/yPartitions+2; i++){
+            for(int j=0; j<NCOLS/xPartitions+2; j++){
+                if(i==0 || i==NROWS/yPartitions+1 || j==0 || j==NCOLS/xPartitions+1)
+                    readM[v(i,j)]=0;
+                else{
+                    readM[v(i,j)]=bigM[h(i-1,j-1)];
+                    }
+            }
+        }
+        for(int i=0; i<yPartitions; i++){  //invia le altre porzioni
+            for(int j=0; j<xPartitions; j++){
+                if(i==0 && j==0){
+                    continue;
+                }else{
+                    MPI_Send(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 0, MPI_COMM_WORLD);
+                dest++;}
+             }
+        } 
+    }else{  //Gli altri rank ricevono la porzione di matrice globale
+        MPI_Status stat;
+        for(int i=0; i<NROWS/yPartitions+2; i++){
+            for(int j=0; j<NCOLS/xPartitions+2; j++){
+                readM[v(i,j)]=0;
+            }
+        }
+        MPI_Recv(&readM[v(1,1)], 1, rec, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &stat);
+    }
+}
+void * run(void * arg){ //thread function, ogni thread prende una cella dalla coda e la elabora
     while( !ending){
         pthread_mutex_lock(&mutex);
     while (q.empty() && !ending)
@@ -168,7 +228,7 @@ void * run(void * arg){
              }
     return NULL;
 }
-void transitionFunction(int x, int y){
+void transitionFunction(int x, int y){  //Funzione di transizione
     int cont=0;// Conto i vicini vivi
 	for(int di=-1;di<2;di++)
 		for(int dj=-1;dj<2;dj++)
@@ -188,91 +248,7 @@ void transitionFunction(int x, int y){
 			writeM[v(x,y)]=0;
     pthread_mutex_unlock(&mutex);
 }
-
-
-
-
-
-
-
-
-
-void loadConfiguration(){
-    std::ifstream configurazione("Configuration.txt");
-    if(configurazione.is_open()){
-        configurazione >> xPartitions >> yPartitions >> nThreads >> steps;
-        configurazione.close();
-    }else{
-        printf("Errore nell'apertura del file di configurazione");
-        exit(1);
-    }
-}
-void loadBigM(){
-        std::ifstream Input("Input.txt");
-        if(Input.is_open()){
-            char c;
-            int i=0;
-            while (Input.get(c)){
-                if(c!='0' && c!='1')
-                    continue;
-                bigM[i]=c - '0';
-                i++;
-        } 
-            Input.close();
-        }else{
-            printf("Errore nell'apertura del file di Input");
-            exit(1);
-    } 
-}
-
-void init(){
-    loadConfiguration();
-    threads=new pthread_t[nThreads];
-    if(Rank==0)
-        loadBigM();
-}
-void initAutoma(){
-    if(Rank==0){
-        int dest=1;
-        for(int i=0; i<NROWS/yPartitions+2; i++){
-            for(int j=0; j<NCOLS/xPartitions+2; j++){
-                if(i==0 || i==NROWS/yPartitions+1 || j==0 || j==NCOLS/xPartitions+1)
-                    readM[v(i,j)]=0;
-                else{
-                    readM[v(i,j)]=bigM[h(i-1,j-1)];
-                    }
-            }
-        }
-        for(int i=0; i<yPartitions; i++){
-            for(int j=0; j<xPartitions; j++){
-                if(i==0 && j==0){
-                    continue;
-                }else{
-                    
-                    MPI_Send(&bigM[h(i*(NROWS/yPartitions),j*(NCOLS/xPartitions))], 1, bigMtype, dest, 0, MPI_COMM_WORLD);
-                dest++;}
-                
-            }
-        } 
-        
-
-    }else{
-        MPI_Status stat;
-        for(int i=0; i<NROWS/yPartitions+2; i++){
-            for(int j=0; j<NCOLS/xPartitions+2; j++){
-                readM[v(i,j)]=0;
-            }
-        }
-        MPI_Recv(&readM[v(1,1)], 1, rec, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &stat);
-        
-        
-    }
-   
-
-
-}
-
-void exchBoard(){
+void exchBoard(){   //Scambio bordi fra vicini
     MPI_Request request;
     MPI_Status status;
     int c;
@@ -286,8 +262,6 @@ void exchBoard(){
 	MPI_Send(&readM[v(1,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 15, MPI_COMM_WORLD);
 	MPI_Recv(&readM[v(NROWS/yPartitions+1,0)], NCOLS/xPartitions+2, MPI_INT, rankDown, 15, MPI_COMM_WORLD, &status);
 	MPI_Recv(&readM[v(0,0)], NCOLS/xPartitions+2, MPI_INT, rankUp, 12, MPI_COMM_WORLD, &status);
-    
-
 }
 void print(){
     //I processi mandano la loro porzione al processo 0 per stampare
@@ -325,8 +299,7 @@ void print(){
         printf("-----------------------------------------------\n");
     }
 }
-
- void transFunc(){   
+ void transFunc(){   //funzione di aggiunta task alla thread pool
 	for(int i=1;i<NROWS/yPartitions+1;i++){
 		for(int j=1;j<NCOLS/xPartitions+1;j++){
             cell c(i,j);
@@ -335,8 +308,7 @@ void print(){
             pthread_cond_broadcast(&cond);
             
 			}}}
-void swap(){
-   
+void swap(){    //swap fra matrici
     while (!q.empty()) {
         sleep(0.1);
     }
@@ -345,10 +317,4 @@ void swap(){
     writeM=p;
     }
 
-void initPthread(){
-    pthread_mutex_init(&mutex, NULL);
-    pthread_cond_init(&cond, NULL);
-    for(int i=0; i<nThreads; i++){
-        pthread_create(&threads[i], NULL, &run, NULL);
-    }
-}
+
