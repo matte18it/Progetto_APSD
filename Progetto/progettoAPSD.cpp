@@ -77,7 +77,12 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size( MPI_COMM_WORLD, &nProc);
      
     init(); //caricamento parametri e matrici
-
+    if(xPartitions*yPartitions!=nProc){
+        if(Rank==0)
+            printf("Errore: numero di processi diverso da partizioni \n");
+        MPI_Finalize();
+        return 0;
+    }
     //inizializzazione strutture dati con i dati presi da file
     readM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
     writeM = new int[(NROWS/yPartitions+2)*(NCOLS/xPartitions+2)];
