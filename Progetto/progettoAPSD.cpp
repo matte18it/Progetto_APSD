@@ -282,8 +282,7 @@ void exchBoard(){   //Scambio bordi fra vicini
 void print(int step){
     //I processi mandano la loro porzione al processo 0 per stampare
     if(Rank!=0){
-        MPI_Request request;
-        MPI_Isend(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD, &request);
+        MPI_Send(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD);
     }
     else {
         int dest=1;
