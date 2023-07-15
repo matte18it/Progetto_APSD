@@ -265,7 +265,6 @@ void transitionFunction(int x, int y){  //Funzione di transizione
     pthread_mutex_unlock(&mutex);
 }
 void exchBoard(){   //Scambio bordi fra vicini
-    MPI_Request request;
     MPI_Status status;
     int c;
     //colonne
@@ -283,7 +282,8 @@ void exchBoard(){   //Scambio bordi fra vicini
 void print(int step){
     //I processi mandano la loro porzione al processo 0 per stampare
     if(Rank!=0){
-        MPI_Send(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD);
+        MPI_Request request;
+        MPI_Isend(&readM[v(1,1)], 1, rec, 0, 29, MPI_COMM_WORLD, &request);
     }
     else {
         int dest=1;
