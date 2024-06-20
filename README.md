@@ -1,4 +1,4 @@
-# Progetto APSD
+# Progetto Algoritmi Paralleli Sistemi Distribuiti
 Si realizzi una piattaforma per l’esecuzione parallela di modelli ad automi cellulari. Si considerino solo celle il cui valore può essere un intero (int) pari a ‘0’ o a ‘1’. 
 
 In particolar modo un modello ad automa cellulare sarà definito dalla funzione: voidtransitionFunction(int x, int y) che definisce la funzione di transizione per la generica cella (x,y).
@@ -28,3 +28,10 @@ Mentre il file di input conterrà lo stato iniziale del dominio, come ad esempio
 00000000000000000000 
 
 00000000000000000000 
+
+# ❗️DISCLAIMER❗️
+Alla realizzazione del proggetto hanno contribuito gli studenti dell'Università della Calabaria:
+<ul>
+  <li>Matteo Canino</li>
+  <li>Pierfrancesco Napoli</li>
+</ul>
